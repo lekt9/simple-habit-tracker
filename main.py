@@ -140,19 +140,19 @@ def handle_message(update: Update, context: CallbackContext):
                 f"The photo does not seem to be valid evidence for your habit. {response['message']}"
             )
     else:
-        # Use LLM to decide if the text is a journal entry or a new habit
+        # Use LLM to decide if the text is a journal entry, a new habit, or a regular chat message
         response, is_journal_entry = process_with_openai(
-            """Determine if the following text is a journal entry or a new habit. Return a json object in this format:
+            """Determine if the following text is a journal entry, a new habit, or just a chat message without relation to this habit tracker. Return a json object in this format:
             {
-                "is_journal_entry": true,
-                "message": "This is a journal entry."
+                "type": "journal_entry" | "new_habit" | "chat_message",
+                "message": "This is a journal entry." | "This is a new habit." | "This is a chat message."
             }""",
             None,
             all_habits,
             last_20_evidences,
         )
 
-        if is_journal_entry:
+        if response["type"] == "journal_entry":
             # Save journal entry to MongoDB
             users_collection.update_one(
                 {"user_id": user_id},
@@ -166,7 +166,7 @@ def handle_message(update: Update, context: CallbackContext):
             )
 
             update.message.reply_text("Journal entry received. Keep up the good work!")
-        else:
+        elif response["type"] == "new_habit":
             # Save or update user habit to MongoDB
             habit_type = "general"  # Default habit type, you can modify this as needed
             users_collection.update_one(
@@ -187,6 +187,8 @@ def handle_message(update: Update, context: CallbackContext):
             update.message.reply_text(
                 f"Got it! I'll help you stay accountable for: {text}. Please send evidence of your progress or journal your activities."
             )
+        else:
+            pass
 
         # Update pinned message
         update_pinned_message(user_id)
