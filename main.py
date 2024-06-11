@@ -134,7 +134,7 @@ def handle_message(update: Update, context: CallbackContext):
             )
 
             # Update pinned message
-            update_pinned_message(user_id)
+            update_pinned_message(user_id, update.message.chat_id)
         else:
             update.message.reply_text(
                 f"The photo does not seem to be valid evidence for your habit. {response['message']}"
@@ -199,19 +199,24 @@ def extract_score_from_response(response):
     return 0  # Default score if not found
 
 
-def update_pinned_message(user_id):
+def update_pinned_message(user_id, chat_id):
     user = users_collection.find_one({"user_id": user_id})
     if user:
         habits = user.get("habits", [])
         message_text = "Your current points:\n"
+        total_points = 0
         for habit in habits:
-            message_text += f"{habit['name']}: {habit.get('points', 0)} points\n"
+            points = habit.get("points", 0)
+            message_text += f"{habit['name']}: {points} points\n"
+            total_points += points
+
+        message_text += f"\nTotal points: {total_points} points"
 
         # Send a new message with the points
-        message = bot.send_message(chat_id=user_id, text=message_text)
+        message = bot.send_message(chat_id=chat_id, text=message_text)
 
         # Pin the message
-        bot.pin_chat_message(chat_id=user_id, message_id=message.message_id)
+        bot.pin_chat_message(chat_id=chat_id, message_id=message.message_id)
 
 
 def get_all_habits():
@@ -326,7 +331,9 @@ def send_reminder():
             bot.send_message(user_id, reminder_message)
 
             # Update pinned message
-            update_pinned_message(user_id)
+            update_pinned_message(
+                user_id, user_id
+            )  # Assuming user_id is the chat_id for reminders
 
 
 def check_progress(update: Update, context: CallbackContext):
