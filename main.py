@@ -59,7 +59,7 @@ scheduler.start()
 def start(update: Update, context: CallbackContext):
     update.message.reply_text(
         "Welcome! Tell me your habit and I'll help you stay accountable. "
-        "For example, you can say 'I want to eat healthy' or 'I want to lose weight'."
+        "For example, you can say 'I want to eat healthy' or 'I want to lose weight'.\n Use /check_progress to see how you are faring."
     )
 
 
@@ -200,8 +200,8 @@ def handle_message(update: Update, context: CallbackContext):
         response, is_journal_entry = process_with_openai(
             """Determine if the following text is a journal entry, a new habit, or just a chat message without relation to this habit tracker. Return a json object in this format:
             {
-                "type": "journal_entry" | "new_habit" | "chat_message",
-                "message": "This is a journal entry." | "This is a new habit." | "This is a chat message."
+                "type": "journal_entry" | "new_habit" | "chat_message" | "chat_command",
+                "message": "This is a journal entry." | "This is a new habit." | "This is a chat message/command."
             }"""
             + text,
             None,
