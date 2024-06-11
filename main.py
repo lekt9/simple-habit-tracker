@@ -191,7 +191,7 @@ def handle_message(update: Update, context: CallbackContext):
             pass
 
         # Update pinned message
-        update_pinned_message(user_id)
+        update_pinned_message(user_id, update.message.chat_id)
 
 
 def extract_score_from_response(response):
