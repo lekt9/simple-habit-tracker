@@ -7,3 +7,5 @@ apscheduler==3.6.3
 requests==2.25.1
 retry
 pytz
+python-dotenv
+dnspython
