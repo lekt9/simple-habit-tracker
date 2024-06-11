@@ -207,6 +207,11 @@ def update_pinned_message(user_id):
         bot.pin_chat_message(chat_id=user_id, message_id=message.message_id)
 
 
+def get_all_habits():
+    habits = users_collection.distinct("habit")
+    return habits
+
+
 @retry(tries=3, delay=1)
 def process_with_openai(prompt, image_path=None, habits=None, evidences=None):
     messages = [
