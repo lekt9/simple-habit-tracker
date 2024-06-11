@@ -67,9 +67,22 @@ def handle_message(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     text = update.message.text
 
+    # Check if user exists
     user = users_collection.find_one({"user_id": user_id})
     if not user:
-        update.message.reply_text("User not found. Please start by adding a new habit.")
+        # Create a new user
+        users_collection.insert_one(
+            {
+                "user_id": user_id,
+                "habits": [],
+                "events": [],
+                "journal_entries": [],
+                "last_activity": datetime.now(),
+            }
+        )
+        update.message.reply_text(
+            "Welcome! I've created a new profile for you. Please start by adding a new habit."
+        )
         return
 
     # Fetch all available habits
@@ -351,7 +364,17 @@ def check_progress(update: Update, context: CallbackContext):
 
     # Fetch the user's habits
     user = users_collection.find_one({"user_id": user_id})
-    if not user or "habits" not in user:
+    if not user:
+        # Create a new user
+        users_collection.insert_one(
+            {
+                "user_id": user_id,
+                "habits": [],
+                "events": [],
+                "journal_entries": [],
+                "last_activity": datetime.now(),
+            }
+        )
         update.message.reply_text(
             "You don't have any habits yet. Start by adding a new habit!"
         )
