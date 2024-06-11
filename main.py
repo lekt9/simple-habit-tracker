@@ -127,6 +127,7 @@ def handle_message(update: Update, context: CallbackContext):
             all_habits,
             last_20_evidences,
         )
+        user_habits = None
 
         if response["points"] > 0:
             # Check if the habit exists for the user
