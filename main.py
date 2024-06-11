@@ -90,19 +90,19 @@ def handle_message(update: Update, context: CallbackContext):
         # Process photo with OpenAI
         response, score = process_with_openai(
             """Check if this photo is valid evidence for the user's habit and provide a score from 1 to 10 if it can support the habit as evidence it is worked on. Return a json object in this format:
-{
-"habit": "running every day",
-"information": {
-"pace": "12min/km",
-"duration": "60mins",
-"distance": "5km",
-},
-"message": "Great run! You're on your journey to getting fitter and healthier. Good on you!",
-"points": 6
-}
-when checking evidence, you will also know the last 20 evidences as context as some evidences will require knowledge of previous habits - ie if we want to track how much food eaten in a day, we need to see the prevoius meals of the day, to warn the user they are reaching the limit.
-Today's date is:
-"""
+            {
+                "habit": "running every day",
+                "information": {
+                    "pace": "12min/km",
+                    "duration": "60mins",
+                    "distance": "5km",
+                },
+                "message": "Great run! You're on your journey to getting fitter and healthier. Good on you!",
+                "points": 6
+            }
+            when checking evidence, you will also know the last 20 evidences as context as some evidences will require knowledge of previous habits - ie if we want to track how much food eaten in a day, we need to see the prevoius meals of the day, to warn the user they are reaching the limit.
+            Today's date is:
+            """
             + datetime.today().strftime("%B %d, %Y"),
             photo_path,
             all_habits,
@@ -112,9 +112,9 @@ Today's date is:
         if response["points"] > 0:
             # Update user points and log event
             users_collection.update_one(
-                {"user_id": user_id},
+                {"user_id": user_id, "habits.name": response["habit"]},
                 {
-                    "$inc": {"points": score},
+                    "$inc": {"habits.$.points": score},
                     "$set": {"last_activity": datetime.now()},
                     "$push": {
                         "events": {
@@ -126,6 +126,7 @@ Today's date is:
                         }
                     },
                 },
+                upsert=True,
             )
 
             update.message.reply_text(
@@ -142,10 +143,10 @@ Today's date is:
         # Use LLM to decide if the text is a journal entry or a new habit
         response, is_journal_entry = process_with_openai(
             """Determine if the following text is a journal entry or a new habit. Return a json object in this format:
-{
-"is_journal_entry": true,
-"message": "This is a journal entry."
-}""",
+            {
+                "is_journal_entry": true,
+                "message": "This is a journal entry."
+            }""",
             None,
             all_habits,
             last_20_evidences,
@@ -171,11 +172,15 @@ Today's date is:
             users_collection.update_one(
                 {"user_id": user_id},
                 {
-                    "$set": {
-                        "habit": text,
-                        "last_activity": datetime.now(),
-                        "habit_type": habit_type,
-                    }
+                    "$addToSet": {
+                        "habits": {
+                            "name": text,
+                            "type": habit_type,
+                            "points": 0,
+                            "last_activity": datetime.now(),
+                        }
+                    },
+                    "$set": {"last_activity": datetime.now()},
                 },
                 upsert=True,
             )
@@ -197,8 +202,10 @@ def extract_score_from_response(response):
 def update_pinned_message(user_id):
     user = users_collection.find_one({"user_id": user_id})
     if user:
-        points = user.get("points", 0)
-        message_text = f"Your current points: {points}"
+        habits = user.get("habits", [])
+        message_text = "Your current points:\n"
+        for habit in habits:
+            message_text += f"{habit['name']}: {habit.get('points', 0)} points\n"
 
         # Send a new message with the points
         message = bot.send_message(chat_id=user_id, text=message_text)
@@ -208,7 +215,7 @@ def update_pinned_message(user_id):
 
 
 def get_all_habits():
-    habits = users_collection.distinct("habit")
+    habits = users_collection.distinct("habits.name")
     return habits
 
 
