@@ -225,12 +225,13 @@ def handle_message(update: Update, context: CallbackContext):
         elif response["type"] == "new_habit":
             # Check if a similar habit exists
             similar_habit = None
-            for habit in user_habits:
-                if (
-                    similar(habit["name"].lower(), text.lower()) > 0.8
-                ):  # Adjust the similarity threshold as needed
-                    similar_habit = habit
-                    break
+            if user_habits:
+                for habit in user_habits:
+                    if (
+                        similar(habit["name"].lower(), text.lower()) > 0.8
+                    ):  # Adjust the similarity threshold as needed
+                        similar_habit = habit
+                        break
 
             if similar_habit:
                 # Update the existing habit
