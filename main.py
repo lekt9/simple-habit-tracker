@@ -365,8 +365,8 @@ def main():
     dispatcher = updater.dispatcher
 
     dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(MessageHandler(Filters.text | Filters.photo, handle_message))
     dispatcher.add_handler(CommandHandler("check_progress", check_progress))
+    dispatcher.add_handler(MessageHandler(Filters.text | Filters.photo, handle_message))
 
     # Schedule reminders
     scheduler.add_job(
