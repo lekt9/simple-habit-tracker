@@ -329,12 +329,44 @@ def send_reminder():
             update_pinned_message(user_id)
 
 
+def check_progress(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+
+    # Fetch the user's habits
+    user = users_collection.find_one({"user_id": user_id})
+    if not user or "habits" not in user:
+        update.message.reply_text(
+            "You don't have any habits yet. Start by adding a new habit!"
+        )
+        return
+
+    habits = user["habits"]
+    events = user.get("events", [])
+
+    # Use OpenAI to generate a progress report
+    prompt = f'The user has the following habits: {json.dumps(habits, default=str)}. Here are the last 20 pieces of evidence: {json.dumps(events[-20:], default=str)}. Generate a progress report for each habit and provide suggestions for improvement. Return a json object in this format:\n{{\n"progress_report": [\n{{\n"habit": "habit_name",\n"progress": "progress_description",\n"suggestions": "suggestions_for_improvement"\n}}\n]\n}}'
+    response, _ = process_with_openai(prompt)
+
+    progress_report = response.get("progress_report", [])
+    if not progress_report:
+        update.message.reply_text("No progress report available at the moment.")
+        return
+
+    # Format the progress report
+    report_text = "Here is your progress report:\n"
+    for report in progress_report:
+        report_text += f"\nHabit: {report['habit']}\nProgress: {report['progress']}\nSuggestions: {report['suggestions']}\n"
+
+    update.message.reply_text(report_text)
+
+
 def main():
     updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
     dispatcher = updater.dispatcher
 
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(MessageHandler(Filters.text | Filters.photo, handle_message))
+    dispatcher.add_handler(CommandHandler("check_progress", check_progress))
 
     # Schedule reminders
     scheduler.add_job(
