@@ -87,6 +87,7 @@ def handle_message(update: Update, context: CallbackContext):
 
     # Fetch all available habits
     all_habits = get_all_habits()
+    user_habits = None
 
     # Fetch the last 20 pieces of evidence
     last_20_evidences = list(
@@ -127,7 +128,6 @@ def handle_message(update: Update, context: CallbackContext):
             all_habits,
             last_20_evidences,
         )
-        user_habits = None
 
         if response["points"] > 0:
             # Check if the habit exists for the user
