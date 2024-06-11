@@ -67,6 +67,11 @@ def handle_message(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     text = update.message.text
 
+    user = users_collection.find_one({"user_id": user_id})
+    if not user:
+        update.message.reply_text("User not found. Please start by adding a new habit.")
+        return
+
     # Fetch all available habits
     all_habits = get_all_habits()
 
@@ -203,22 +208,25 @@ def extract_score_from_response(response):
 
 def update_pinned_message(user_id, chat_id):
     user = users_collection.find_one({"user_id": user_id})
-    if user:
-        habits = user.get("habits", [])
-        message_text = "Your current points:\n"
-        total_points = 0
-        for habit in habits:
-            points = habit.get("points", 0)
-            message_text += f"{habit['name']}: {points} points\n"
-            total_points += points
+    if not user:
+        logger.warning(f"User {user_id} not found. Cannot update pinned message.")
+        return
 
-        message_text += f"\nTotal points: {total_points} points"
+    habits = user.get("habits", [])
+    message_text = "Your current points:\n"
+    total_points = 0
+    for habit in habits:
+        points = habit.get("points", 0)
+        message_text += f"{habit['name']}: {points} points\n"
+        total_points += points
 
-        # Send a new message with the points
-        message = bot.send_message(chat_id=chat_id, text=message_text)
+    message_text += f"\nTotal points: {total_points} points"
 
-        # Pin the message
-        bot.pin_chat_message(chat_id=chat_id, message_id=message.message_id)
+    # Send a new message with the points
+    message = bot.send_message(chat_id=chat_id, text=message_text)
+
+    # Pin the message
+    bot.pin_chat_message(chat_id=chat_id, message_id=message.message_id)
 
 
 def get_all_habits():
