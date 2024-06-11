@@ -1,3 +1,4 @@
+from difflib import SequenceMatcher
 import json
 import os
 import logging
@@ -33,7 +34,6 @@ MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
 
-
 # Initialize MongoDB client
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["habit"]
@@ -63,6 +63,10 @@ def start(update: Update, context: CallbackContext):
     )
 
 
+def similar(a, b):
+    return SequenceMatcher(None, a, b).ratio()
+
+
 def handle_message(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     text = update.message.text
@@ -80,10 +84,6 @@ def handle_message(update: Update, context: CallbackContext):
                 "last_activity": datetime.now(),
             }
         )
-        update.message.reply_text(
-            "Welcome! I've created a new profile for you. Please start by adding a new habit."
-        )
-        return
 
     # Fetch all available habits
     all_habits = get_all_habits()
@@ -118,6 +118,7 @@ def handle_message(update: Update, context: CallbackContext):
                 "message": "Great run! You're on your journey to getting fitter and healthier. Good on you!",
                 "points": 6
             }
+            You MUST match the habit string's value to be exactly the same as the closest habit available that I provided you.
             when checking evidence, you will also know the last 20 evidences as context as some evidences will require knowledge of previous habits - ie if we want to track how much food eaten in a day, we need to see the prevoius meals of the day, to warn the user they are reaching the limit.
             Today's date is:
             """
@@ -128,25 +129,61 @@ def handle_message(update: Update, context: CallbackContext):
         )
 
         if response["points"] > 0:
-            # Update user points and log event
-            users_collection.update_one(
-                {"user_id": user_id, "habits.name": response["habit"]},
-                {
-                    "$inc": {"habits.$.points": score},
-                    "$set": {"last_activity": datetime.now()},
-                    "$push": {
-                        "events": {
-                            "type": "photo",
-                            "timestamp": datetime.now(),
-                            "response": response,
-                            "score": score,
-                            "habit_type": "photo",  # Add habit type here
-                        }
-                    },
-                },
-                upsert=True,
+            # Check if the habit exists for the user
+            user_habits = users_collection.find_one({"user_id": user_id}).get(
+                "habits", []
             )
+            existing_habit = None
+            for habit in user_habits:
+                if (
+                    similar(habit["name"].lower(), response["habit"].lower()) > 0.8
+                ):  # Adjust the similarity threshold as needed
+                    existing_habit = habit
+                    break
 
+            if existing_habit:
+                # Habit exists, update the points and log the event
+                users_collection.update_one(
+                    {"user_id": user_id, "habits.name": existing_habit["name"]},
+                    {
+                        "$inc": {"habits.$.points": score},
+                        "$set": {"last_activity": datetime.now()},
+                        "$push": {
+                            "events": {
+                                "type": "photo",
+                                "timestamp": datetime.now(),
+                                "response": response,
+                                "score": score,
+                                "habit_type": "photo",  # Add habit type here
+                            }
+                        },
+                    },
+                    upsert=True,
+                )
+            else:
+                # Habit does not exist, add the habit and log the event
+                users_collection.update_one(
+                    {"user_id": user_id},
+                    {
+                        "$addToSet": {
+                            "habits": {
+                                "name": response["habit"],
+                                "points": score,
+                                "last_activity": datetime.now(),
+                            }
+                        },
+                        "$push": {
+                            "events": {
+                                "type": "photo",
+                                "timestamp": datetime.now(),
+                                "response": response,
+                                "score": score,
+                                "habit_type": "photo",  # Add habit type here
+                            }
+                        },
+                    },
+                    upsert=True,
+                )
             update.message.reply_text(
                 f"Evidence received and processed. Your points have been updated by {score} points.\n{response['message']}"
             )
@@ -164,7 +201,8 @@ def handle_message(update: Update, context: CallbackContext):
             {
                 "type": "journal_entry" | "new_habit" | "chat_message",
                 "message": "This is a journal entry." | "This is a new habit." | "This is a chat message."
-            }""",
+            }"""
+            + text,
             None,
             all_habits,
             last_20_evidences,
@@ -185,26 +223,54 @@ def handle_message(update: Update, context: CallbackContext):
 
             update.message.reply_text("Journal entry received. Keep up the good work!")
         elif response["type"] == "new_habit":
-            # Save or update user habit to MongoDB
-            habit_type = "general"  # Default habit type, you can modify this as needed
-            users_collection.update_one(
-                {"user_id": user_id},
-                {
-                    "$addToSet": {
-                        "habits": {
-                            "name": text,
-                            "type": habit_type,
-                            "points": 0,
-                            "last_activity": datetime.now(),
-                        }
+            # Check if a similar habit exists
+            similar_habit = None
+            for habit in user_habits:
+                if (
+                    similar(habit["name"].lower(), text.lower()) > 0.8
+                ):  # Adjust the similarity threshold as needed
+                    similar_habit = habit
+                    break
+
+            if similar_habit:
+                # Update the existing habit
+                users_collection.update_one(
+                    {"user_id": user_id, "habits.name": similar_habit["name"]},
+                    {
+                        "$set": {
+                            "habits.$.name": text,
+                            "habits.$.last_activity": datetime.now(),
+                        },
+                        "$setOnInsert": {"habits.$.points": 0},
                     },
-                    "$set": {"last_activity": datetime.now()},
-                },
-                upsert=True,
-            )
-            update.message.reply_text(
-                f"Got it! I'll help you stay accountable for: {text}. Please send evidence of your progress or journal your activities."
-            )
+                    upsert=True,
+                )
+                update.message.reply_text(
+                    f"Updated your habit to: {text}. Please send evidence of your progress or journal your activities."
+                )
+            else:
+                # Save or update user habit to MongoDB
+                habit_type = (
+                    "general"  # Default habit type, you can modify this as needed
+                )
+                users_collection.update_one(
+                    {"user_id": user_id},
+                    {
+                        "$addToSet": {
+                            "habits": {
+                                "name": text,
+                                "type": habit_type,
+                                "points": 0,
+                                "last_activity": datetime.now(),
+                            }
+                        },
+                        "$set": {"last_activity": datetime.now()},
+                    },
+                    upsert=True,
+                )
+                update.message.reply_text(
+                    f"Got it! I'll help you stay accountable for: {text}. Please send evidence of your progress or journal your activities."
+                )
         else:
             pass
 
