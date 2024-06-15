@@ -33,7 +33,8 @@ MONGO_URI = os.getenv("MONGO_URI")
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
-
+# WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = "https://n8n.socrathink.com/webhook-test/__EMPTY__/webhook/habit"
 # Initialize MongoDB client
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["habit"]
@@ -108,7 +109,7 @@ def handle_message(update: Update, context: CallbackContext):
 
         # Process photo with OpenAI
         response, score = process_with_openai(
-            """Check if this photo is valid evidence for the user's habit and provide a score from 1 to 10 if it can support the habit as evidence it is worked on. Return a json object in this format:
+            """Check if this photo is valid evidence for the user's habit and provide a score from -10 to 10 if it can support the habit as evidence it is worked on, or disprove that the habit was broken. Go with -10 if it completely goes against the habit. Return a json object in this format:
             {
                 "habit": "running every day",
                 "information": {
@@ -129,7 +130,7 @@ def handle_message(update: Update, context: CallbackContext):
             last_20_evidences,
         )
 
-        if response["points"] > 0:
+        if response["points"] > -10:
             # Check if the habit exists for the user
             user_habits = users_collection.find_one({"user_id": user_id}).get(
                 "habits", []
@@ -185,6 +186,11 @@ def handle_message(update: Update, context: CallbackContext):
                     },
                     upsert=True,
                 )
+
+            # Send webhook with the current object
+            current_object = users_collection.find_one({"user_id": user_id})
+            send_webhook(current_object)
+
             update.message.reply_text(
                 f"Evidence received and processed. Your points have been updated by {score} points.\n{response['message']}"
             )
@@ -394,12 +400,15 @@ def send_reminder():
 
             # Fetch the last 30 pieces of evidence for this habit
             last_30_evidences = [e for e in events if e["habit_name"] == habit_name][
-                :30
+                :20
             ]
+            print("30", last_30_evidences)
 
             # Use OpenAI to decide if the habit is on track and explain why
-            prompt = f'Here are the last 30 pieces of evidence for the habit \'{habit_name}\': {json.dumps(last_30_evidences, default=str)}. Determine if the habit is on track and explain why. Return a json object in this format:\n{{\n"is_on_track": true,\n"message": "The habit is on track.",\n"reason": "Explanation of why the habit is or is not on track."\n}}'
+            prompt = f'Here are the last 20 pieces of evidence for the habit \'{habit_name}\': {json.dumps(last_30_evidences, default=str)}. Determine if the habit is on track and explain why. Return a json object in this format:\n{{\n"is_on_track": true,\n"message": "The habit is on track.",\n"reason": "Explanation of why the habit is or is not on track."\n}}'
             response, _ = process_with_openai(prompt)
+
+            print("response", response)
 
             if not response.get("is_on_track", False):
                 habits_not_on_track.append(
@@ -408,6 +417,7 @@ def send_reminder():
                         "reason": response.get("reason", "No reason provided"),
                     }
                 )
+            print("not", habits_not_on_track)
 
         if habits_not_on_track:
             # Generate a personalized reminder message using OpenAI
@@ -466,6 +476,20 @@ def check_progress(update: Update, context: CallbackContext):
         report_text += f"\nHabit: {report['habit']}\nProgress: {report['progress']}\nSuggestions: {report['suggestions']}\n"
 
     update.message.reply_text(report_text)
+
+
+def send_webhook(data):
+    webhook_url = os.getenv("WEBHOOK_URL")
+    if not webhook_url:
+        logger.error("WEBHOOK_URL is not set in the environment variables.")
+        return
+
+    try:
+        response = requests.post(webhook_url, json=data)
+        response.raise_for_status()
+        logger.info("Webhook sent successfully.")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to send webhook: {e}")
 
 
 def main():
