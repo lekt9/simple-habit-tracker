@@ -121,7 +121,8 @@ def handle_message(update: Update, context: CallbackContext):
                 "points": 6
             }
             You MUST match the habit string's value to be exactly the same as the closest habit available that I provided you.
-            when checking evidence, you will also know the last 20 evidences as context as some evidences will require knowledge of previous habits - ie if we want to track how much food eaten in a day, we need to see the prevoius meals of the day, to warn the user they are reaching the limit.
+            when checking evidence, you will also know the last 20 evidences as conext as some evidences will require knowledge of previous habits - ie if we want to track how much food eaten in a day, we need to see the prevoius meals of the day, to warn the user they are reaching the limit.
+            You MUST follow the same keys as presented by previous evidences to keep things consistent. You may add new keys only if they are needed.
             Today's date is:
             """
             + datetime.today().strftime("%B %d, %Y"),
